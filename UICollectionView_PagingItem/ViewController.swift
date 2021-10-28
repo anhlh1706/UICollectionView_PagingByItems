@@ -9,11 +9,14 @@ import UIKit
 
 class ViewController: UIViewController {
 
-    let itemsSpacing: CGFloat = 10
-    let itemWidth: CGFloat = 300
-    let leftRightSpacing: CGFloat = 20
+    let itemsSpacing: CGFloat = 0
+    let itemWidth: CGFloat = UIScreen.main.bounds.width - 140
     
     @IBOutlet weak var collectionView: UICollectionView!
+    
+    var layout: UICollectionViewFlowLayout? {
+        collectionView.collectionViewLayout as? UICollectionViewFlowLayout
+    }
     
     var veloc: CGFloat = 0
     
@@ -22,8 +25,18 @@ class ViewController: UIViewController {
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: String(describing: UICollectionViewCell.self))
+        
+        collectionView.contentInset = UIEdgeInsets(top: 0, left: 60, bottom: 0, right: 60)
+        (collectionView.collectionViewLayout as? UICollectionViewFlowLayout)?.minimumInteritemSpacing = 0
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        DispatchQueue.main.asyncAfter(deadline: .now()) {
+            self.updateScaleFactor()
+        }
+        
+    }
 }
 
 extension ViewController: UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout {
@@ -41,6 +54,10 @@ extension ViewController: UICollectionViewDataSource, UICollectionViewDelegate, 
         return CGSize(width: itemWidth, height: 200)
     }
     
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        updateScaleFactor()
+    }
+    
     func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint, targetContentOffset: UnsafeMutablePointer<CGPoint>) {
         veloc = velocity.x
         updateContentOffset()
@@ -50,8 +67,22 @@ extension ViewController: UICollectionViewDataSource, UICollectionViewDelegate, 
         updateContentOffset()
     }
     
-    func getXPositionOfItems(atIndex index: CGFloat) -> CGFloat {
-        return itemWidth * index + (itemsSpacing * (index - 1)) + leftRightSpacing
+    func updateScaleFactor() {
+        collectionView.visibleCells.forEach { cell in
+            let centerX = view.center.x
+            
+            if cell.globalFrame().minX < 60 {
+                let cellX = cell.globalFrame().midX
+                let scaleFactor = (1 - (centerX - cellX) / itemWidth) / 10 + 0.9
+                cell.transform = CGAffineTransform(scaleX: scaleFactor, y: scaleFactor)
+            } else {
+                let minX = cell.globalFrame().minX
+                let targetX = view.center.x + itemWidth / 2
+                
+                let scaleFactor = ((targetX - minX) / itemWidth) / 10 + 0.9
+                cell.transform = CGAffineTransform(scaleX: scaleFactor, y: scaleFactor)
+            }
+        }
     }
     
     func updateContentOffset() {
@@ -63,7 +94,28 @@ extension ViewController: UICollectionViewDataSource, UICollectionViewDelegate, 
         } else {
             currentIndex = Int(((collectionView.contentOffset.x + veloc) / (itemWidth + itemsSpacing)).rounded(.up))
         }
+        if currentIndex < collectionView.numberOfItems(inSection: 0) {
+            collectionView.scrollToItem(at: IndexPath(item: currentIndex, section: 0), at: .left, animated: true)
+        }
+    }
+}
+
+extension UIView {
+    func globalFrame() -> CGRect {
+        var x = frame.minX
+        var y = frame.minY
         
-        collectionView.scrollToItem(at: IndexPath(item: currentIndex, section: 0), at: .left, animated: true)
+        var responder: UIResponder? = self
+        while responder is UIView {
+            responder = responder!.next
+            x += (responder as? UIView)?.frame.origin.x ?? 0
+            y += (responder as? UIView)?.frame.origin.y ?? 0
+            
+            if responder is UIScrollView {
+                x -= (responder as? UIScrollView)?.contentOffset.x ?? 0
+                y -= (responder as? UIScrollView)?.contentOffset.y ?? 0
+            }
+        }
+        return CGRect(x: x, y: y, width: bounds.width, height: bounds.height)
     }
 }
